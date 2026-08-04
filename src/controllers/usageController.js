@@ -47,4 +47,36 @@ async function bulkUpload(req, res, next) {
   }
 }
 
-module.exports = { bulkUpload };
+/**
+ * GET /api/usage?page=1&limit=50&date=YYYY-MM-DD
+ * Lists the daily per-app aggregate rows (distinct from the detailed
+ * session timeline, which lives under /api/usage/sessions).
+ */
+async function list(req, res, next) {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const skip = (page - 1) * limit;
+
+    const filter = { userId: DEFAULT_USER_ID };
+    if (req.query.date) filter.date = req.query.date;
+
+    const [items, total] = await Promise.all([
+      Usage.find(filter).sort({ date: -1, usageMinutes: -1 }).skip(skip).limit(limit).lean(),
+      Usage.countDocuments(filter)
+    ]);
+
+    return res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      items
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { bulkUpload, list };

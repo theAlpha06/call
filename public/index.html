@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Call Monitor Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --border: #262b36;
+    --text: #e6e8ec;
+    --muted: #8a90a0;
+    --accent: #5b8def;
+    --accent2: #4ecb8c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  #apiKeyBox { display: flex; gap: 8px; align-items: center; }
+  #apiKeyBox input {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 200px;
+  }
+  #apiKeyBox button {
+    background: var(--accent); border: none; color: white; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  nav {
+    display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--border);
+  }
+  nav button {
+    background: none; border: none; color: var(--muted); padding: 12px 16px;
+    cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent;
+  }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+  .panel h2 { font-size: 14px; margin: 0 0 14px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; }
+  .pill.INCOMING { background: rgba(78,203,140,0.15); color: var(--accent2); }
+  .pill.OUTGOING { background: rgba(91,141,239,0.15); color: var(--accent); }
+  .pill.MISSED { background: rgba(235,87,87,0.15); color: #eb5757; }
+  .pagination { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .pagination button { background: var(--border); border: none; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  #dateInput { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; }
+  .app-row { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .app-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; }
+  .app-header:hover { background: rgba(255,255,255,0.02); }
+  .app-header .name { font-weight: 600; }
+  .app-header .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .app-header .total { font-size: 16px; font-weight: 700; color: var(--accent); }
+  .sessions { display: none; padding: 0 14px 14px; }
+  .sessions.open { display: block; }
+  .session-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border); }
+  .session-row:first-child { border-top: none; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; font-size: 13px; }
+  canvas { max-height: 260px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Call Monitor Dashboard</h1>
+  <div id="apiKeyBox">
+    <input id="apiKeyInput" type="password" placeholder="X-API-Key (if set)" />
+    <button onclick="saveApiKey()">Save</button>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="overview">Overview</button>
+  <button class="tab-btn" data-tab="calls">Recent Calls</button>
+  <button class="tab-btn" data-tab="usage">App Usage Timeline</button>
+</nav>
+
+<main>
+
+  <section id="overview" class="tab active">
+    <div class="cards" id="overviewCards"></div>
+    <div class="panel">
+      <h2>Screen Time - Last 7 Days</h2>
+      <canvas id="dailyChart"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Apps (Last 7 Days)</h2>
+      <table>
+        <thead><tr><th>App</th><th>Sessions</th><th>Total Time</th></tr></thead>
+        <tbody id="topAppsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="calls" class="tab">
+    <div class="panel">
+      <h2>Recent Calls</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Number</th><th>Duration</th><th>When</th></tr></thead>
+        <tbody id="callsBody"></tbody>
+      </table>
+      <div class="pagination">
+        <button id="callsPrev" onclick="changeCallsPage(-1)">Prev</button>
+        <span id="callsPageLabel"></span>
+        <button id="callsNext" onclick="changeCallsPage(1)">Next</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="usage" class="tab">
+    <div class="panel">
+      <h2>Timeline for a Day</h2>
+      <input id="dateInput" type="date" onchange="loadUsageForDate(this.value)" />
+      <div id="usageApps" style="margin-top:16px;"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const API_KEY_STORAGE = 'callmonitor_api_key';
+let dailyChart = null;
+let callsPage = 1;
+let callsTotalPages = 1;
+
+function apiKey() { return localStorage.getItem(API_KEY_STORAGE) || ''; }
+function saveApiKey() {
+  localStorage.setItem(API_KEY_STORAGE, document.getElementById('apiKeyInput').value.trim());
+  loadAll();
+}
+document.getElementById('apiKeyInput').value = apiKey();
+
+async function apiGet(path) {
+  const headers = {};
+  if (apiKey()) headers['X-API-Key'] = apiKey();
+  const res = await fetch(path, { headers });
+  if (!res.ok) throw new Error('Request failed: ' + path + ' (' + res.status + ')');
+  return res.json();
+}
+
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+function fmtDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function fmtMinutes(min) {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function fmtTime(ms) {
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtDateTime(ms) {
+  return new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ---------- Overview ----------
+async function loadOverview() {
+  const [callsResp, summaryResp] = await Promise.all([
+    apiGet('/api/calls?limit=1'),
+    apiGet('/api/usage/daily-summary?days=7')
+  ]);
+
+  const totalScreenSeconds = summaryResp.daily.reduce((sum, d) => sum + d.totalDuration, 0);
+  const totalSessions = summaryResp.daily.reduce((sum, d) => sum + d.sessionCount, 0);
+
+  document.getElementById('overviewCards').innerHTML = `
+    <div class="card"><div class="label">Total Calls Logged</div><div class="value">${callsResp.total}</div></div>
+    <div class="card"><div class="label">Screen Time (7d)</div><div class="value">${fmtDuration(totalScreenSeconds)}</div></div>
+    <div class="card"><div class="label">App Sessions (7d)</div><div class="value">${totalSessions}</div></div>
+    <div class="card"><div class="label">Apps Used (7d)</div><div class="value">${summaryResp.topApps.length}</div></div>
+  `;
+
+  const labels = summaryResp.daily.map((d) => d.date);
+  const data = summaryResp.daily.map((d) => Math.round(d.totalDuration / 60));
+
+  if (dailyChart) dailyChart.destroy();
+  dailyChart = new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Minutes', data, backgroundColor: '#5b8def', borderRadius: 4 }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8a90a0' } },
+        y: { grid: { color: '#262b36' }, ticks: { color: '#8a90a0' } }
+      }
+    }
+  });
+
+  document.getElementById('topAppsBody').innerHTML = summaryResp.topApps.map((a) => `
+    <tr>
+      <td>${a.appName}</td>
+      <td>${a.sessionCount}</td>
+      <td>${fmtDuration(a.totalDuration)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" class="empty">No data yet</td></tr>';
+}
+
+// ---------- Calls ----------
+async function loadCalls() {
+  const resp = await apiGet(`/api/calls?page=${callsPage}&limit=25`);
+  callsTotalPages = resp.totalPages || 1;
+
+  document.getElementById('callsBody').innerHTML = resp.items.map((c) => `
+    <tr>
+      <td><span class="pill ${c.callType}">${c.callType}</span></td>
+      <td>${c.phoneNumber}</td>
+      <td>${fmtDuration(c.duration)}</td>
+      <td>${fmtDateTime(c.timestamp)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="empty">No calls synced yet</td></tr>';
+
+  document.getElementById('callsPageLabel').textContent = `Page ${callsPage} of ${callsTotalPages}`;
+  document.getElementById('callsPrev').disabled = callsPage <= 1;
+  document.getElementById('callsNext').disabled = callsPage >= callsTotalPages;
+}
+
+function changeCallsPage(delta) {
+  callsPage = Math.max(1, callsPage + delta);
+  loadCalls();
+}
+
+// ---------- Usage timeline ----------
+function toggleApp(idx) {
+  document.getElementById('sessions-' + idx).classList.toggle('open');
+}
+
+async function loadUsageForDate(date) {
+  const container = document.getElementById('usageApps');
+  container.innerHTML = '<div class="empty">Loading...</div>';
+
+  const resp = await apiGet(`/api/usage/sessions/${date}`);
+
+  if (!resp.apps.length) {
+    container.innerHTML = '<div class="empty">No usage sessions recorded for this date</div>';
+    return;
+  }
+
+  container.innerHTML = resp.apps.map((app, idx) => `
+    <div class="app-row">
+      <div class="app-header" onclick="toggleApp(${idx})">
+        <div>
+          <div class="name">${app.appName}</div>
+          <div class="meta">First open ${fmtTime(app.firstOpen)} &middot; Last close ${fmtTime(app.lastClose)} &middot; ${app.sessionCount} session${app.sessionCount === 1 ? '' : 's'}</div>
+        </div>
+        <div class="total">${fmtDuration(app.totalDuration)}</div>
+      </div>
+      <div class="sessions" id="sessions-${idx}">
+        ${app.sessions.map((s) => `
+          <div class="session-row">
+            <span>${fmtTime(s.sessionStart)} - ${fmtTime(s.sessionEnd)}</span>
+            <span>${fmtDuration(s.duration)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+async function loadAll() {
+  try { await loadOverview(); } catch (e) { console.error(e); }
+  try { await loadCalls(); } catch (e) { console.error(e); }
+
+  const dateInput = document.getElementById('dateInput');
+  dateInput.value = todayStr();
+  try { await loadUsageForDate(dateInput.value); } catch (e) { console.error(e); }
+}
+
+loadAll();
+</script>
+
+</body>
+</html>

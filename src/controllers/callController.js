@@ -70,4 +70,34 @@ async function bulkUpload(req, res, next) {
   }
 }
 
-module.exports = { bulkUpload };
+/**
+ * GET /api/calls?page=1&limit=50&type=INCOMING
+ */
+async function list(req, res, next) {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const skip = (page - 1) * limit;
+
+    const filter = { userId: DEFAULT_USER_ID };
+    if (req.query.type) filter.callType = req.query.type;
+
+    const [items, total] = await Promise.all([
+      Call.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),
+      Call.countDocuments(filter)
+    ]);
+
+    return res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      items
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { bulkUpload, list };
