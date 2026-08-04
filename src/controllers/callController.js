@@ -30,11 +30,12 @@ async function bulkUpload(req, res, next) {
     const errors = [];
 
     for (const record of records) {
-      const { androidCallId, number, type, duration, timestamp } = record;
+      const { androidCallId, number, contactName, deviceId, type, duration, timestamp } = record;
 
       if (
         androidCallId === undefined ||
         !number ||
+        !deviceId ||
         !type ||
         duration === undefined ||
         timestamp === undefined
@@ -48,6 +49,8 @@ async function bulkUpload(req, res, next) {
           userId: DEFAULT_USER_ID,
           androidCallId,
           phoneNumber: number,
+          contactName: contactName || null,
+          deviceId,
           callType: type,
           duration,
           timestamp
@@ -81,6 +84,7 @@ async function list(req, res, next) {
 
     const filter = { userId: DEFAULT_USER_ID };
     if (req.query.type) filter.callType = req.query.type;
+    if (req.query.deviceId) filter.deviceId = req.query.deviceId;
 
     const [items, total] = await Promise.all([
       Call.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),

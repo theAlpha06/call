@@ -119,7 +119,7 @@
     <div class="panel">
       <h2>Recent Calls</h2>
       <table>
-        <thead><tr><th>Type</th><th>Number</th><th>Duration</th><th>When</th></tr></thead>
+        <thead><tr><th>Date &amp; Time</th><th>Phone Number</th><th>Contact Name</th><th>Type</th><th>Duration</th><th>Device</th></tr></thead>
         <tbody id="callsBody"></tbody>
       </table>
       <div class="pagination">
@@ -135,6 +135,18 @@
       <h2>Timeline for a Day</h2>
       <input id="dateInput" type="date" onchange="loadUsageForDate(this.value)" />
       <div id="usageApps" style="margin-top:16px;"></div>
+    </div>
+    <div class="panel">
+      <h2>All Sessions</h2>
+      <table>
+        <thead><tr><th>App Name</th><th>Start Time</th><th>End Time</th><th>Total Duration</th><th>Date</th></tr></thead>
+        <tbody id="sessionsBody"></tbody>
+      </table>
+      <div class="pagination">
+        <button id="sessionsPrev" onclick="changeSessionsPage(-1)">Prev</button>
+        <span id="sessionsPageLabel"></span>
+        <button id="sessionsNext" onclick="changeSessionsPage(1)">Next</button>
+      </div>
     </div>
   </section>
 
@@ -238,6 +250,23 @@ async function loadOverview() {
   `).join('') || '<tr><td colspan="3" class="empty">No data yet</td></tr>';
 }
 
+function fmtCallDuration(seconds) {
+  if (!seconds || seconds <= 0) return '-';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function fmtFullDateTime(ms) {
+  const d = new Date(ms);
+  const datePart = d.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' });
+  const timePart = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  return `${datePart}, ${timePart}`;
+}
+
 // ---------- Calls ----------
 async function loadCalls() {
   const resp = await apiGet(`/api/calls?page=${callsPage}&limit=25`);
@@ -245,12 +274,14 @@ async function loadCalls() {
 
   document.getElementById('callsBody').innerHTML = resp.items.map((c) => `
     <tr>
-      <td><span class="pill ${c.callType}">${c.callType}</span></td>
+      <td>${fmtFullDateTime(c.timestamp)}</td>
       <td>${c.phoneNumber}</td>
-      <td>${fmtDuration(c.duration)}</td>
-      <td>${fmtDateTime(c.timestamp)}</td>
+      <td>${c.contactName || '-'}</td>
+      <td><span class="pill ${c.callType}">${c.callType}</span></td>
+      <td>${fmtCallDuration(c.duration)}</td>
+      <td>${c.deviceId || '-'}</td>
     </tr>
-  `).join('') || '<tr><td colspan="4" class="empty">No calls synced yet</td></tr>';
+  `).join('') || '<tr><td colspan="6" class="empty">No calls synced yet</td></tr>';
 
   document.getElementById('callsPageLabel').textContent = `Page ${callsPage} of ${callsTotalPages}`;
   document.getElementById('callsPrev').disabled = callsPage <= 1;
@@ -260,6 +291,34 @@ async function loadCalls() {
 function changeCallsPage(delta) {
   callsPage = Math.max(1, callsPage + delta);
   loadCalls();
+}
+
+// ---------- All sessions (flat table) ----------
+let sessionsPage = 1;
+let sessionsTotalPages = 1;
+
+async function loadSessions() {
+  const resp = await apiGet(`/api/usage/sessions?page=${sessionsPage}&limit=25`);
+  sessionsTotalPages = resp.totalPages || 1;
+
+  document.getElementById('sessionsBody').innerHTML = resp.items.map((s) => `
+    <tr>
+      <td>${s.appName}</td>
+      <td>${fmtTime(s.sessionStart)}</td>
+      <td>${fmtTime(s.sessionEnd)}</td>
+      <td>${fmtDuration(s.duration)}</td>
+      <td>${s.date}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="empty">No sessions synced yet</td></tr>';
+
+  document.getElementById('sessionsPageLabel').textContent = `Page ${sessionsPage} of ${sessionsTotalPages}`;
+  document.getElementById('sessionsPrev').disabled = sessionsPage <= 1;
+  document.getElementById('sessionsNext').disabled = sessionsPage >= sessionsTotalPages;
+}
+
+function changeSessionsPage(delta) {
+  sessionsPage = Math.max(1, sessionsPage + delta);
+  loadSessions();
 }
 
 // ---------- Usage timeline ----------
@@ -307,6 +366,7 @@ function todayStr() {
 async function loadAll() {
   try { await loadOverview(); } catch (e) { console.error(e); }
   try { await loadCalls(); } catch (e) { console.error(e); }
+  try { await loadSessions(); } catch (e) { console.error(e); }
 
   const dateInput = document.getElementById('dateInput');
   dateInput.value = todayStr();

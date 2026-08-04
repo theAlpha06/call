@@ -15,6 +15,15 @@ const callSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    contactName: {
+      type: String,
+      default: null
+    },
+    deviceId: {
+      type: String,
+      required: true,
+      index: true
+    },
     callType: {
       type: String,
       enum: ['INCOMING', 'OUTGOING', 'MISSED', 'REJECTED', 'VOICEMAIL', 'BLOCKED', 'UNKNOWN'],
@@ -33,10 +42,10 @@ const callSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// This is the server-side duplicate guard mirroring the client's Room
-// UNIQUE index: the same physical call, identified by the device's
-// CallLog._ID, must never be stored twice for the same user. Re-uploads
-// (e.g. after a client retry following a network blip) become no-ops here.
-callSchema.index({ userId: 1, androidCallId: 1 }, { unique: true });
+// androidCallId (CallLog._ID) is only unique *within a single device* - if
+// this backend ever aggregates more than one phone for the same user,
+// deviceId has to be part of the key or two devices' call #152 would look
+// like the same call and one would be silently dropped as a "duplicate".
+callSchema.index({ userId: 1, deviceId: 1, androidCallId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Call', callSchema);
